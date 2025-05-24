@@ -63,14 +63,14 @@ class TryparrotaiUnofficialApi
         $this->page->navigate('https://www.tryparrotai.com/app/my-profile')->waitForNavigation(
             \HeadlessChromium\Page::LOAD,
         );
-        $this->page->evaluate(
+        $this->evaluate(
             'window.confirm=function(){return true;}',
-        )->getReturnValue();
+        );
         // wait for logout to complete
         $this->waitForFalse(function () {
-            return $this->page->evaluate(
+            return $this->evaluate(
                 'document.querySelectorAll("a[title=Dashboard]").length>0',
-            )->getReturnValue();
+            );
         });
     }
     private function login(): void
@@ -96,11 +96,11 @@ class TryparrotaiUnofficialApi
         // Logging you in...
         // Welcome back!
         $this->waitForFalse(function () {
-            $data = $this->page->evaluate(
+            $data = $this->evaluate(
                 'statuses=[];document.querySelectorAll("div[role=status]").forEach(e=>statuses.push(e.innerText));
                 hasDashboard=document.querySelectorAll("a[title=Dashboard]").length>0;
                 ({statuses,hasDashboard})',
-            )->getReturnValue();
+            );
             if ($data['hasDashboard']) {
                 return false;
             }
@@ -246,11 +246,11 @@ class TryparrotaiUnofficialApi
         };
         $chunks = $splitIntoChunks($text);
         var_dump($chunks);
-        $page->evaluate(
+        $this->evaluate(
             <<<'JS'
                 [...document.querySelectorAll("span")].filter(e=>e.innerText==='Remove "made with Parrot" watermark')[0].click()
             JS
-        )->getReturnValue();
+        );
         $fullVoiceFileHandle = tmpfile();
         $fullVoiceFilePath = stream_get_meta_data($fullVoiceFileHandle)['uri'];
         $chunkFileHandle = tmpfile();
@@ -273,11 +273,11 @@ class TryparrotaiUnofficialApi
             $page->navigate($url)->waitForNavigation(
                 \HeadlessChromium\Page::LOAD,
             );
-            $page->evaluate(
+            $this->evaluate(
                 <<<'JS'
                 [...document.querySelectorAll("span")].filter(e=>e.innerText==='Remove "made with Parrot" watermark')[0].click()
             JS
-            )->getReturnValue();
+            );
 
             $this->waitForFalse(function () use ($page) {
                 try {
@@ -295,11 +295,11 @@ class TryparrotaiUnofficialApi
             // this will take a while...
             $chunkUrl = null;
             $this->waitForFalse(function () use ($page, &$chunkUrl) {
-                $data = $page->evaluate(
+                $data = $this->evaluate(
                     <<<'JS'
                     document.querySelectorAll("video")?.[0]?.src?.trim()
                     JS
-                )->getReturnValue();
+                );
                 if (!empty($data)) {
                     $chunkUrl = $data;
                     return false;
@@ -400,5 +400,14 @@ JSON.stringify(arr);
             'Jake Paul' => '53',
             'David Goggins' => '52',
         );
+    }
+    private function evaluate(string $script): mixed
+    {
+        try {
+            return $this->page->evaluate($script)->getReturnValue();
+        } catch (\HeadlessChromium\Exception\OperationTimedOut $e) {
+            // there are random timeouts in the page evaluation.. probably an issue in the chrome-php/chrome library...
+            return $this->page->evaluate($script)->getReturnValue();
+        }
     }
 }
