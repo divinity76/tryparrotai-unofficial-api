@@ -403,11 +403,15 @@ JSON.stringify(arr);
     }
     private function evaluate(string $script): mixed
     {
+        // there are random timeouts in the page evaluation.. probably an issue in the chrome-php/chrome library...
         try {
             return $this->page->evaluate($script)->getReturnValue();
         } catch (\HeadlessChromium\Exception\OperationTimedOut $e) {
-            // there are random timeouts in the page evaluation.. probably an issue in the chrome-php/chrome library...
-            return $this->page->evaluate($script)->getReturnValue();
+            try {
+                return $this->page->evaluate($script)->getReturnValue();
+            } catch (\HeadlessChromium\Exception\OperationTimedOut $e) {
+                return $this->page->evaluate($script)->getReturnValue();
+            }
         }
     }
     private $ch;
