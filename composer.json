@@ -1,0 +1,23 @@
+{
+    "name": "divinity76/tryparrotai-unofficial-api",
+    "description": "Unofficial PHP API client for tryparrotai.com",
+    "type": "library",
+    "license": "Unlicense",
+    "autoload": {
+        "psr-4": {
+            "Divinity76\\TryparrotaiUnofficialApi\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Hans Henrik Bergan",
+            "email": "hans@loltek.net"
+        }
+    ],
+    "minimum-stability": "beta",
+    "require": {
+        "chrome-php/chrome": ">=1.13",
+        "chrome-php/wrench": ">=1.7"
+    }
+}
+
