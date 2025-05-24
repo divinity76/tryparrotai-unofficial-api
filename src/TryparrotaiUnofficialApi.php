@@ -306,7 +306,7 @@ class TryparrotaiUnofficialApi
                 }
             }, timeout: 60 * 3, retryInterval: 1);
             /** @var string $chunkUrl */
-            $chunkMP4 = file_get_contents($chunkUrl);
+            $chunkMP4 = $this->curlGet($chunkUrl);
             if ($chunkMP4 === false) {
                 throw new \RuntimeException('Failed to download chunk: ' . $chunkUrl);
             }
@@ -409,5 +409,31 @@ JSON.stringify(arr);
             // there are random timeouts in the page evaluation.. probably an issue in the chrome-php/chrome library...
             return $this->page->evaluate($script)->getReturnValue();
         }
+    }
+    private $ch;
+    private function curlGet(string $url)
+    {
+        if (empty($this->ch)) {
+            $this->ch = curl_init();
+            curl_setopt_array($this->ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_USERAGENT => 'curl/' . (curl_version()['version_number']) . ' (TryparrotaiUnofficialApi)',
+                CURLOPT_ENCODING => '',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_SSL_VERIFYSTATUS => false,
+            ]);
+        }
+        curl_setopt($this->ch, CURLOPT_URL, $url);
+        $response = curl_exec($this->ch);
+        if ($response === false) {
+            throw new \RuntimeException('cURL error: ' . curl_error($this->ch));
+        }
+        $httpCode = curl_getinfo($this->ch, CURLINFO_HTTP_CODE);
+        if ($httpCode !== 200) {
+            throw new \RuntimeException('cURL error: HTTP code ' . $httpCode . ' for URL: ' . $url);
+        }
+        return $response;
     }
 }
