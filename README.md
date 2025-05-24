@@ -1,6 +1,6 @@
 # TryparrotaiUnofficialApi
 
-A PHP library for generating voice/videos on [TryParrotAI](https://www.tryparrotai.com) through headless browser automation.
+An *unofficial* PHP library for generating voice/videos on [TryParrotAI](https://www.tryparrotai.com) through headless browser automation.
 
 ## Requirements
 
@@ -79,5 +79,4 @@ If you need to use a custom voice ID, pass the ID directly instead of the name.
 ## Notes
 
 - Make sure `ffmpeg` is installed and available in your system `PATH`.
-- Temporary video chunks are concatenated using FFmpeg. Large text inputs may result in long processing times.
-- The API uses headless browser automation; ensure you comply with TryParrotAI's terms of service.
+- With text above 300 characters, chunks are concatenated using FFmpeg.
