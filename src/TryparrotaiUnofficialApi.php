@@ -22,6 +22,8 @@ class TryparrotaiUnofficialApi
 
     private function init(): void
     {
+        $this->flatDB_handle = tmpfile();
+        $this->flatDB_path = stream_get_meta_data($this->flatDB_handle)['uri'];
         if (empty($this->chromiumPath)) {
             $this->chromiumPath = $this->getChromeBinaryPath();
         }
@@ -47,6 +49,7 @@ class TryparrotaiUnofficialApi
     }
     function __destruct()
     {
+        fclose($this->flatDB_handle);
         try {
             $this->logout();
         } catch (\Throwable $e) {
@@ -198,6 +201,9 @@ class TryparrotaiUnofficialApi
         string $voice,
         string $text
     ) {
+        $this->flatDB_records = [];
+        rewind($this->flatDB_handle);
+        ftruncate($this->flatDB_handle, 0);
         $voiceId = $this->getVoiceId($voice);
         $page = $this->page;
         $page->navigate('https://www.tryparrotai.com/app/create')->waitForNavigation(
@@ -253,18 +259,10 @@ class TryparrotaiUnofficialApi
         );
         $fullVoiceFileHandle = tmpfile();
         $fullVoiceFilePath = stream_get_meta_data($fullVoiceFileHandle)['uri'];
-        $chunkFileHandle = tmpfile();
-        $chunkFilePath = stream_get_meta_data($chunkFileHandle)['uri'];
         $ffmpegConcatTxtFileHandle = tmpfile();
         $ffmpegConcatTxtFilePath = stream_get_meta_data($ffmpegConcatTxtFileHandle)['uri'];
-        fwrite($ffmpegConcatTxtFileHandle, implode("\n", [
-            "file '$fullVoiceFilePath'",
-            "file '$chunkFilePath'",
-        ]));
-        $ffmpegConcatIntermediateFileHandle = tmpfile();
-        $ffmpegConcatIntermediateFilePath = stream_get_meta_data($ffmpegConcatIntermediateFileHandle)['uri'];
+        $ffmpegInputTxtString = '';
         foreach ($chunks as $chunkId => $chunk) {
-
             $url = 'https://www.tryparrotai.com/app/create?' .
                 http_build_query(array(
                     'text' => $chunk,
@@ -310,44 +308,36 @@ class TryparrotaiUnofficialApi
             if ($chunkMP4 === false) {
                 throw new \RuntimeException('Failed to download chunk: ' . $chunkUrl);
             }
-            if ($chunkId === 0) {
-                fwrite($fullVoiceFileHandle, $chunkMP4);
-                rewind($fullVoiceFileHandle);
-            } else {
-                rewind($chunkFileHandle);
-                ftruncate($chunkFileHandle, 0);
-                fwrite($chunkFileHandle, $chunkMP4);
-                // ffmpeg -f concat -safe 0 -i input.txt -c copy output.mp4
-                $cmd = implode(' ', [
-                    'ffmpeg',
-                    '-fflags +genpts',
-                    '-f concat',
-                    '-safe 0',
-                    '-i ' . escapeshellarg($ffmpegConcatTxtFilePath),
-                    '-c copy',
-                    '-bsf:v',
-                    'h264_mp4toannexb',
-                    '-f mp4',
-                    '-y',
-                    escapeshellarg($ffmpegConcatIntermediateFilePath),
-                ]);
-                echo $cmd . PHP_EOL;
-                passthru($cmd, $returnVar);
-                if ($returnVar !== 0) {
-                    throw new \RuntimeException('ffmpeg failed with code: ' . $returnVar);
-                }
-                rewind($ffmpegConcatIntermediateFileHandle);
-                rewind($fullVoiceFileHandle);
-                ftruncate($fullVoiceFileHandle, 0);
-                stream_copy_to_stream(
-                    $ffmpegConcatIntermediateFileHandle,
-                    $fullVoiceFileHandle,
-                );
+            $this->flatDbStore($chunkMP4);
+            $lastRecord = $this->flatDB_records[array_key_last($this->flatDB_records)];
+            $ffmpegInputTxtStringNew = "file 'subfile,,start," . $lastRecord[self::FLAT_DB_RECORD_INDEX_OFFSET] . ",end," . ($lastRecord[self::FLAT_DB_RECORD_INDEX_OFFSET] + $lastRecord[self::FLAT_DB_RECORD_INDEX_SIZE]) . ",,:" . $this->flatDB_path . "'\n";
+            //var_dump($ffmpegInputTxtStringNew);
+            $ffmpegInputTxtString .= $ffmpegInputTxtStringNew;
+        }
+        fwrite($ffmpegConcatTxtFileHandle, $ffmpegInputTxtString);
+        $generate_final_file = true;
+        if ($generate_final_file) {
+            $cmd = implode(' ', [
+                'ffmpeg',
+                '-protocol_whitelist file,subfile',
+                '-fflags +genpts',
+                '-f concat',
+                '-safe 0',
+                '-i ' . escapeshellarg($ffmpegConcatTxtFilePath),
+                '-c copy',
+                //'-bsf:v h264_mp4toannexb',
+                '-f mp4',
+                '-y',
+                escapeshellarg($fullVoiceFilePath),
+            ]);
+            //var_dump($cmd);
+            passthru($cmd, $returnVar);
+            if ($returnVar !== 0) {
+                throw new \RuntimeException('ffmpeg command failed with return code: ' . $returnVar);
             }
         }
-        fclose($chunkFileHandle);
         fclose($ffmpegConcatTxtFileHandle);
-        fclose($ffmpegConcatIntermediateFileHandle);
+        rewind($fullVoiceFileHandle);
         return ["path" => $fullVoiceFilePath, "handle" => $fullVoiceFileHandle];
     }
     private function getVoiceId(string $voice): string
@@ -439,5 +429,22 @@ JSON.stringify(arr);
             throw new \RuntimeException('cURL error: HTTP code ' . $httpCode . ' for URL: ' . $url);
         }
         return $response;
+    }
+    private $flatDB_handle;
+    private $flatDB_path;
+    private const FLAT_DB_RECORD_INDEX_OFFSET = 0;
+    private const FLAT_DB_RECORD_INDEX_SIZE = 1;
+    private $flatDB_records = [];
+    private function flatDbStore(string $bytes): void
+    {
+        $start_pos = ftell($this->flatDB_handle);
+        $size = strlen($bytes);
+        if (fwrite($this->flatDB_handle, $bytes) !== $size) {
+            throw new \RuntimeException('Failed to write to flat DB file.');
+        }
+        $this->flatDB_records[] = [
+            self::FLAT_DB_RECORD_INDEX_OFFSET => $start_pos,
+            self::FLAT_DB_RECORD_INDEX_SIZE => $size,
+        ];
     }
 }
